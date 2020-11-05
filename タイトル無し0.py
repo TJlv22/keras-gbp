@@ -1,76 +1,87 @@
+from keras import models
+from keras.layers import LSTM,Dense
+import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler
+from keras.utils import np_utils
 
-def softmax(a):
-    c=np.max(a)
-    expa=np.exp(a-c)
-    sumexpa=np.sum(expa)
-    y=expa/sumexpa
-    return y
+data=pd.read_csv("1440.csv")
+data=pd.DataFrame(data[["realreturn","future_direction"]])
 
-
-def gradient(f, x):
-    h = 1e-4 # 0.0001
-    grad = np.zeros_like(x)
+"""p=2
+for lag in range(1, p+1) :
+    col="lag_{}".format(lag)
+    data[col]=data["realreturn"].shift(lag)
+    """
     
-    it = np.nditer(x, flags=['multi_index'], op_flags=['readwrite'])
-    while not it.finished:
-        idx = it.multi_index
-        tmp_val = x[idx]
-        x[idx] = tmp_val + h
-        fxh1 = f(x) # f(x+h)
-        
-        x[idx] = tmp_val - h 
-        fxh2 = f(x) # f(x-h)
-        grad[idx] = (fxh1 - fxh2) / (2*h)
-        
-        x[idx] = tmp_val # 値を元に戻す
-        it.iternext()   
-        
-    return grad
+direction=np.array(data["future_direction"])
+nd=np.where(direction==1,1,0)
+data["future_direction"]=nd
+
+#create data
+datax=[]
+datay=[]
+p=20
+
+for i in range(len(data)-p) :
+    datax.append(data["realreturn"][i:i+p])
+    datay.append(data["future_direction"][i+p])
     
-def kansu(x):
-    return x[0]**2+x[1]**2
-a=np.array([-3,4.0])
+datax=np.array(datax)
+datay=np.array(datay)
+datay=np_utils.to_categorical(datay)
+
+#split data
+l=int(len(datax)*0.8)
+xtrain=datax[:l]
+xtest=datax[l:]
+ytrain=datay[:l]
+ytest=datay[l:]
+
+#normalize data
+scal=StandardScaler()
+scaly=StandardScaler()
+xtrain1=scal.fit_transform(xtrain)
+xtest1=scal.fit_transform(xtest)
+ytrain1=scaly.fit_transform(ytrain.reshape(len(ytrain),2))
+ytest1=scaly.fit_transform(ytest.reshape(len(ytest),2))
+
+#change shape of data
+xtrain1=np.reshape(xtrain1,(xtrain1.shape[0],1,xtrain1.shape[1]))
+xtest1=np.reshape(xtest1,(xtest1.shape[0],1,xtest1.shape[1]))
+
+#create model
+model=models.Sequential()
+model.add(LSTM(128,activation="tanh",input_shape=(1,p)))
+#model.add(Dense(128,activation="relu"))
+model.add(Dense(2,activation="sigmoid"))
+model.compile(loss="categorical_crossentropy",optimizer="adam")
+#model.compile(loss="mean_squared_error", optimizer="adam")
+
+#learn and plot
+result=model.fit(xtrain1,ytrain1,batch_size=100,epochs=100)
+yp=model.predict(xtest1)
+yp=scaly.inverse_transform(yp).flatten()
+plt.figure(figsize=(10,6))
+plt.plot(yp,label="predict")
+plt.plot(ytest,label="price")
+plt.legend()
 
 
 
-def gradientdecent(f,initx,lr=0.01,num=100):
-    a=initx
-    for i in range(num):
-        g=gradient(f, a)
-        a-=lr*g
-       
-    return a
-    
 
 
-def crossentro(y,t):
-    delta=1e-7
-    return -np.sum(t*np.log(y+delta))
 
-class simplenet:
-    def __init__(self):
-        self.w=np.random.randn(2,3)
-    def predict(self,x):
-        return np.dot(x,self.w)
-    def loss(self,x,t):
-        z=self.predict(x)
-        y=softmax(z)
-        loss=crossentro(y,t)
-        
-        return loss
 
-print(simplenet().w)
-x=np.array([0.6,0.9])
-p=simplenet().predict(x)
-print(p)
 
-t=np.array([0,0,1])
-print(simplenet().loss(x,t))
 
-def f(w):
-    return simplenet().loss(x,t)
 
-dw=gradient(f,simplenet().w)
-print(dw)
-    
+
+
+
+
+
+
+
+
